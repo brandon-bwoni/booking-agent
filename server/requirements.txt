@@ -5,3 +5,4 @@ langgraph
 langchain
 langchain_openai
 tiktoken
+pymongo
