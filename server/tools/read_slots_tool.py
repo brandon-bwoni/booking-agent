@@ -18,6 +18,7 @@ async def get_provider_schedule(
 ) -> Dict[str, Any]:
     """Fetch provider's schedule with caching."""
     cache_key = f"schedule:{provider_id}:{date}"
+    print(cache_key)
     
     # Check cache first
     provider = await db["providers"].find_one(
