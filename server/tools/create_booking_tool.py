@@ -1,26 +1,15 @@
 from datetime import datetime
+from enum import Enum
+from typing import Optional
 from typing import Union
 from uuid import uuid4
 from pydantic import BaseModel, Field
 from langchain_core.messages import ToolMessage
-from enum import Enum
-from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-class BookingStatus(str, Enum):
-    PENDING = "PENDING"
-    CONFIRMED = "CONFIRMED"
-    CANCELLED = "CANCELLED"
+# Booking models
+from models import BookingStatus, BookingCreate, BookingInDB
 
-class Booking(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    user_id: str = Field(..., min_length=1)
-    description: str = Field(..., min_length=10, max_length=500)
-    timestamp: datetime
-    status: BookingStatus = BookingStatus.PENDING
-    created_at: datetime
-    updated_at: datetime
-    cancellation_reason: Optional[str] = None
 
 async def create_and_save_booking(
     db: AsyncIOMotorDatabase,
@@ -64,7 +53,7 @@ async def create_and_save_booking(
         )
 
     # Create booking object
-    booking = Booking(
+    booking = BookingCreate(
         user_id=user_id,
         description=description.strip(),
         timestamp=booking_time,
