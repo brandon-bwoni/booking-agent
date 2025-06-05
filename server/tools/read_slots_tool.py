@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 # Configuration
 class SlotConfig:
-    DURATION_MINUTES: int = 30
+    DURATION_MINUTES: int = 60
     BUFFER_MINUTES: int = 10
     MAX_DAYS_AHEAD: int = 30
     DEFAULT_TIMEZONE: str = "UTC"
@@ -16,9 +16,9 @@ async def get_provider_schedule(
     provider_id: str,
     date: str
 ) -> Dict[str, Any]:
-    """Fetch provider's schedule with caching."""
-    cache_key = f"schedule:{provider_id}:{date}"
-    print(cache_key)
+    """Fetch provider's schedule"""
+    # cache_key = f"schedule:{provider_id}:{date}"
+    # print(cache_key)
     
     # Check cache first
     provider = await db["providers"].find_one(
