@@ -1,24 +1,64 @@
-from typing import TypedDict, Annotated, Sequence
+from typing import TypedDict, Annotated, Sequence, Dict, Any
 from langchain_core.messages import BaseMessage, ToolMessage, SystemMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import tool
-from tools import create_and_save_booking, read_slots_tool, update_booking_tool
-
-from llm.llm import llm_model
+from IPython.display import Image, display
+from langchain_core.tools import StructuredTool
+from llm.llm import llm
 from llm.context_manager import trim_messages
+from tools.create_booking_tool import create_and_save_booking
+from tools.read_slots_tool import check_availability_and_suggest_slot
+from tools.update_booking_tool import update_booking_status
+import os
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    current_tool: str | None
+    tool_input: Dict[str, Any] | None
     
-agent_tools = {
-    "create_booking": tool(create_and_save_booking),
-    "check_availability": tool(read_slots_tool),
-    "update_booking": tool(update_booking_tool)
-}
+tools = [
+    StructuredTool.from_function(
+        func=create_and_save_booking,
+        name="create_booking",
+        description="Creates a new booking appointment",
+        args_schema={
+            "user_id": (str, "ID of the user making the booking"),
+            "description": (str, "Description of the booking"),
+            "parsed_time": (str, "ISO format datetime string")
+        },
+        return_type=str
+    ),
+    StructuredTool.from_function(
+        func=check_availability_and_suggest_slot,
+        name="check_availability",
+        description="Checks if a time slot is available",
+        args_schema={
+            "provider_id": (str, "ID of the service provider"),
+            "requested_time": (str, "ISO format datetime string")
+        },
+        return_type=ToolMessage
+    ),
+    StructuredTool.from_function(
+        func=update_booking_status,
+        name="update_booking",
+        description="Updates an existing booking's status",
+        args_schema={
+            "booking_id": (str, "ID of the booking to update"),
+            "status": (str, "New status for the booking"),
+            "new_time": (str, "Optional new time for rescheduling"),
+            "reason": (str, "Optional reason for update")
+        },
+        return_type=ToolMessage
+    )
+]
 
-model = llm_model.bind_tools(agent_tools)
+model = llm.bind_tools(tools=tools)
+tool_executor = ToolNode(tools=tools)
+
 
 async def booking_agent(state: AgentState) -> AgentState:
     """
@@ -82,8 +122,9 @@ async def booking_agent(state: AgentState) -> AgentState:
         # Execute tools and get results
         tool_results = []
         for tool_call in response.tool_calls:
-            if tool_call.name in agent_tools:
-                result = agent_tools[tool_call.name](**tool_call.args)
+            if tool_call.name in tools:
+                result = await tools[tool_call.name].ainvoke(tool_call.args)
+                print("Tool args:", tool_call.args)
                 tool_results.append(ToolMessage(
                     tool_call_id=tool_call.id,
                     content=str(result)
@@ -131,17 +172,33 @@ def should_continue(state: AgentState) -> str:
     
     return "continue"
 
-# Update the graph to use the should_continue function
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node("booking_agent", booking_agent)
+graph_builder.add_node("tool_node", tool_executor)
 graph_builder.add_edge(START, "booking_agent")
+
 graph_builder.add_conditional_edges(
     "booking_agent",
     should_continue,
     {
-        "continue": "booking_agent",
+        "continue": "tool_node",
         "end": END
     }
 )
+graph_builder.add_edge("tool_node", "booking_agent")
 
 graph = graph_builder.compile(checkpointer=MemorySaver())
+
+try:
+    display(Image(graph.get_graph().draw_mermaid_png()))
+except Exception:
+    pass
+
+def stream_graph_updates(user_input: str):
+    for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
+        for value in event.values():
+            msg = value["messages"][-1]
+            if isinstance(msg, AIMessage):
+                print("Assistant:", msg.content)
+            elif isinstance(msg, ToolMessage):
+                print("🔧 Tool Response:", msg.content)
