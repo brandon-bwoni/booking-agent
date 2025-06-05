@@ -35,7 +35,6 @@ class BookingBase(BaseModel):
     ] = Field(default="pending")
     created_at: datetime 
     updated_at: datetime 
-    cancel_reason: Optional[str] = None
 
 
 class BookingCreate(BaseModel):
