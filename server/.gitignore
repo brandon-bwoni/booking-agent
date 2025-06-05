@@ -1,2 +1,6 @@
 venv
 .env
+server/__pycache__/
+models/__pycache__/
+tools/__pycache__/
+llm/__pycache__/
